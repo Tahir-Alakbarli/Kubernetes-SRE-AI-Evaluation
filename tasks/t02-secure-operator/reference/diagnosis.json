@@ -1,0 +1,5 @@
+{
+  "root_causes": ["Deployment/ops-prod/config-watcher", "Role/ops-prod/configmap-observer"],
+  "explanation": "The new ReplicaSet cannot create Pods under enforced Pod Security restricted because its bootstrap initContainer requests UID 0, privilege escalation and fails to drop capabilities. Even once the Pod is admissible, the service account's namespaced Role grants get but not list/watch on configmaps, so the controller's reflector fails and readiness stays false.",
+  "validation": "Check Pod admission using the restricted profile and dry-run on a compatible cluster; confirm rollout stays at three available replicas and honors maxUnavailable=0, verify the bootstrap writes the shared emptyDir, check can-i get/list/watch configmaps yes and secrets no, and confirm /ready becomes healthy."
+}

@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-watcher
+  namespace: ops-prod
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels: {app: config-watcher}
+  template:
+    metadata:
+      labels: {app: config-watcher}
+    spec:
+      serviceAccountName: config-watcher-sa
+      automountServiceAccountToken: true
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+      - name: bootstrap
+        image: busybox:1.36.1
+        command: [sh, -c, "printf 'initialized' > /work/bootstrap.state"]
+        securityContext:
+          runAsUser: 0
+          allowPrivilegeEscalation: true
+        volumeMounts:
+        - {name: scratch, mountPath: /work}
+      containers:
+      - name: controller
+        image: ghcr.io/example/config-watcher:1.4.2
+        env:
+        - {name: CONFIG_NAMESPACE, value: ops-prod}
+        - {name: CONFIG_LABEL, value: 'managed=true'}
+        ports: [{containerPort: 8080, name: health, protocol: TCP}]
+        readinessProbe:
+          httpGet: {path: /ready, port: health}
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        resources:
+          requests: {cpu: 150m, memory: 128Mi}
+          limits: {cpu: 400m, memory: 256Mi}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities: {drop: [ALL]}
+        volumeMounts:
+        - {name: scratch, mountPath: /work}
+      volumes:
+      - {name: scratch, emptyDir: {}}

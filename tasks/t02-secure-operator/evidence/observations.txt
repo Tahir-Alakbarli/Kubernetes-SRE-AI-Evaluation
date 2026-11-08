@@ -1,0 +1,18 @@
+INCIDENT BRIEF — 2026-11-05 15:25 UTC (synthetic incident)
+15:25 on-call alert: config-watcher rollout has exceeded its progress deadline, old revision still serves reads
+15:20 rollout request: image 1.4.1 -> 1.4.2, namespace is Pod Security Admission enforce=restricted
+15:21 ReplicaSet config-watcher-7c4... Warning FailedCreate:
+  Error creating: pods "config-watcher-7c4..." is forbidden:
+  violates PodSecurity "restricted:latest": allowPrivilegeEscalation != false (container "bootstrap"),
+  runAsNonRoot != true (container "bootstrap"), unrestricted capabilities (container "bootstrap")
+15:21 old revision: 3/3 Ready; new revision: 0/1 created; deployment strategy maxUnavailable=0 maxSurge=1
+15:22 config-watcher 1.4.2 canary staging test with compliant securityContext:
+  GET /ready -> 503; controller log:
+  'reflector: failed to list *v1.ConfigMap: configmaps is forbidden: User "system:serviceaccount:ops-prod:config-watcher-sa" cannot list resource "configmaps" in API group "" in namespace "ops-prod"'
+  repeated watch startup fails because watch permission is also absent.
+15:23 authorization snapshot:
+  kubectl auth can-i get configmaps --as=system:serviceaccount:ops-prod:config-watcher-sa -n ops-prod -> yes
+  kubectl auth can-i list configmaps --as=system:serviceaccount:ops-prod:config-watcher-sa -n ops-prod -> no
+  kubectl auth can-i watch configmaps --as=system:serviceaccount:ops-prod:config-watcher-sa -n ops-prod -> no
+15:24 operational policy: no cluster-wide RBAC grants or wildcard resource/verb grants; existing namespace security enforcement must remain; reconcile configmaps only within ops-prod
+15:25 build note: init image busybox:1.36.1 supports uid 10001 writing into a writable emptyDir mounted at /work. Application image is an illustrative synthetic placeholder; no registry availability is implied.
