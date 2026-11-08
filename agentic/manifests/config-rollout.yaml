@@ -1,0 +1,111 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payments-release
+  namespace: payments-prod
+data:
+  RELEASE_ID: v1-certified
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  namespace: payments-prod
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+        role: backend
+        release: stable
+    spec:
+      containers:
+      - name: api
+        image: hashicorp/http-echo:1.0.0
+        args:
+        - -listen=:8080
+        - -text=$(RELEASE_ID)
+        ports:
+        - name: http-api
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          periodSeconds: 3
+        resources:
+          requests:
+            cpu: 20m
+            memory: 24Mi
+          limits:
+            cpu: 150m
+            memory: 96Mi
+        env:
+        - name: RELEASE_ID
+          valueFrom:
+            configMapKeyRef:
+              name: payments-release
+              key: RELEASE_ID
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: risk-release
+  namespace: risk-prod
+data:
+  RELEASE_ID: v1-certified
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: risk-api
+  namespace: risk-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: risk-api
+  template:
+    metadata:
+      labels:
+        app: risk-api
+        role: backend
+        release: stable
+    spec:
+      containers:
+      - name: api
+        image: hashicorp/http-echo:1.0.0
+        args:
+        - -listen=:8080
+        - -text=$(RELEASE_ID)
+        ports:
+        - name: http-api
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          periodSeconds: 3
+        resources:
+          requests:
+            cpu: 20m
+            memory: 24Mi
+          limits:
+            cpu: 150m
+            memory: 96Mi
+        env:
+        - name: RELEASE_ID
+          valueFrom:
+            configMapKeyRef:
+              name: risk-release
+              key: RELEASE_ID

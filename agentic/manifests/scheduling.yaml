@@ -1,0 +1,87 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: worker-prod
+  labels:
+    security-zone: internal-workload
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: settlement-budget
+  namespace: worker-prod
+spec:
+  hard:
+    limits.memory: 384Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: settlement-worker
+  namespace: worker-prod
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: settlement-worker
+  template:
+    metadata:
+      labels:
+        app: settlement-worker
+        role: processing
+        release: stable
+    spec:
+      nodeSelector:
+        eval-role: workload
+      containers:
+      - name: worker
+        image: hashicorp/http-echo:1.0.0
+        args:
+        - -listen=:8080
+        - -text=settlement-ready
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          periodSeconds: 3
+        resources:
+          requests:
+            cpu: 20m
+            memory: 24Mi
+          limits:
+            cpu: 120m
+            memory: 96Mi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: settlement-worker
+  namespace: worker-prod
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: settlement-worker
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: settlement-worker
+  namespace: worker-prod
+spec:
+  selector:
+    app: settlement-worker
+    release: stable
+  ports:
+  - port: 8080
+    targetPort: http
+    name: http

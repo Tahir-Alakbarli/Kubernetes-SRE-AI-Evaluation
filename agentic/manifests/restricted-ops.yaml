@@ -1,0 +1,142 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ops-prod
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    security-zone: ops-core
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ops-budget
+  namespace: ops-prod
+spec:
+  hard:
+    limits.memory: 288Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: config-watcher
+  namespace: ops-prod
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime-settings
+  namespace: ops-prod
+data:
+  healthy: 'yes'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: watch-configmaps
+  namespace: ops-prod
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: watch-configmaps
+  namespace: ops-prod
+roleRef:
+  kind: Role
+  name: watch-configmaps
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: config-watcher
+  namespace: ops-prod
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-watcher
+  namespace: ops-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: config-watcher
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: config-watcher
+        version: good
+    spec:
+      serviceAccountName: config-watcher
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+      - name: state
+        emptyDir: {}
+      initContainers:
+      - name: init-state
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - echo initialized > /state/initialized
+        volumeMounts:
+        - name: state
+          mountPath: /state
+        securityContext: &id001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+        resources:
+          requests:
+            cpu: 5m
+            memory: 12Mi
+          limits:
+            cpu: 50m
+            memory: 48Mi
+      containers:
+      - name: watcher
+        image: hashicorp/http-echo:1.0.0
+        args:
+        - -listen=:9090
+        - -text=watcher-healthy
+        ports:
+        - name: http
+          containerPort: 9090
+        volumeMounts:
+        - name: state
+          mountPath: /state
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9090
+          periodSeconds: 3
+        securityContext: *id001
+        resources:
+          requests:
+            cpu: 20m
+            memory: 24Mi
+          limits:
+            cpu: 150m
+            memory: 96Mi
