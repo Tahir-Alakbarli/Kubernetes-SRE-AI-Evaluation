@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storefront-prod
+  labels:
+    security-zone: checkout-edge-v2
+    owner: retail
+    environment: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments-prod
+  labels:
+    security-zone: payments-core
+    owner: finance
+    environment: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: audit-prod
+  labels:
+    security-zone: security-audit
+    owner: secops
+    environment: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sandbox
+  labels:
+    security-zone: untrusted
+    owner: qa
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-system
+  labels:
+    kubernetes.io/metadata.name: kube-system

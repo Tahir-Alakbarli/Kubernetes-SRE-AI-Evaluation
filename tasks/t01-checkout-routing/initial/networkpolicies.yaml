@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: checkout-egress
+  namespace: storefront-prod
+spec:
+  podSelector:
+    matchLabels: {app: checkout-gateway, role: checkout-client}
+  policyTypes: [Egress]
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels: {security-zone: payments-core-legacy}
+      podSelector:
+        matchLabels: {app: payments-api, role: backend}
+    ports: [{protocol: TCP, port: 8080}]
+  - to:
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: kube-system}
+      podSelector:
+        matchLabels: {k8s-app: kube-dns}
+    ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: payments-ingress
+  namespace: payments-prod
+spec:
+  podSelector:
+    matchLabels: {app: payments-api, role: backend}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels: {security-zone: checkout-edge-v1}
+      podSelector:
+        matchLabels: {app: checkout-gateway, role: checkout-client}
+    ports: [{protocol: TCP, port: 8080}]
+  - from:
+    - namespaceSelector:
+        matchLabels: {security-zone: security-audit}
+      podSelector:
+        matchLabels: {app: audit-agent, role: metrics-reader}
+    ports: [{protocol: TCP, port: 9090}]

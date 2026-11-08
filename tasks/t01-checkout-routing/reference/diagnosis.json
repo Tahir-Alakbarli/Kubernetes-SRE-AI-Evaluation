@@ -1,0 +1,9 @@
+{
+  "root_causes": [
+    "Service/payments-prod/payments-api",
+    "NetworkPolicy/payments-prod/payments-ingress",
+    "NetworkPolicy/storefront-prod/checkout-egress"
+  ],
+  "explanation": "The payments-api Service selects release=blue despite two healthy release=stable backends. Even after restoring EndpointSlices, checkout-egress points at a legacy non-existent payments security-zone and payments-ingress trusts an obsolete storefront zone. Because network policies enforce source egress AND destination ingress, all three independent repairs are required. Historical database timeouts are unrelated.",
+  "validation": "Verify ready EndpointSlice backends, authorized gateway request success on Service port 8443, direct TCP/8080 policy enforcement, audit port 9090 and DNS continuity, and denial for debug and sandbox sources."
+}

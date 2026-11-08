@@ -1,0 +1,21 @@
+INCIDENT BRIEF — 2026-11-05 10:42 UTC (synthetic incident)
+10:40:18 checkout POST /authorize -> upstream 503 (no ready upstream targets)
+10:40:21 gateway application logs: upstream connect timeout to payments-api.payments-prod.svc:8443
+10:39:47 storage dashboard: database pool at 65% utilization, no new errors
+10:38:02 payment application: 2/2 Running/Ready, no new restarts, last successful startup 09:10
+10:36:51 EndpointSlice payments-api: address count 0; port name https-internal targetPort http-api
+10:31:04 Change log: storefront-prod security-zone label changed from checkout-edge-v1 to checkout-edge-v2 under tenant migration
+10:24:10 Change log: payments-api Service selector updated during release-blue maintenance
+10:21:13 Change log: checkout-egress was copied from an older policy bundle when storefront moved to a new network zone
+10:13:45 CoreDNS resolves payments-api.payments-prod.svc.cluster.local to 10.96.142.20
+10:02:22 historical logs: payment database timeouts during batch reconciliation (resolved 10:07)
+
+Collected read-only snapshot:
+- kubectl get endpointslice -n payments-prod -l kubernetes.io/service-name=payments-api -> no endpoints
+- kubectl get pods -n payments-prod -l app=payments-api -> two Ready Pods
+- kubectl get networkpolicy -A -> checkout-egress and payments-ingress (see manifests)
+- Connectivity snapshot after bypassing Service *inside a sanctioned diagnostic sandbox*:
+  checkout-gateway -> payments-api PodIP:8080 TCP blocked by policy
+  audit-agent -> payments-api PodIP:9090 TCP succeeds
+  sandbox-curl -> payments-api PodIP:8080 TCP blocked
+- Synthetic evidence package: no addresses, cluster tokens, credentials or production traffic are included.
