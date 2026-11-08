@@ -1,0 +1,189 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storefront-prod
+  labels:
+    security-zone: checkout-edge-v2
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments-prod
+  labels:
+    security-zone: payments-core
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: untrusted
+  labels:
+    security-zone: public
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  namespace: payments-prod
+spec:
+  replicas: 3
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+        role: backend
+        release: stable
+    spec:
+      containers:
+      - name: api
+        image: hashicorp/http-echo:1.0.0
+        args:
+        - "-listen=:8080"
+        - "-text=payments-api healthy"
+        ports:
+        - name: http-api
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 2
+          periodSeconds: 3
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments-api
+  namespace: payments-prod
+spec:
+  selector:
+    app: payments-api
+    release: stable
+  ports:
+  - name: https-internal
+    port: 8443
+    targetPort: http-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payments-api
+  namespace: payments-prod
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: payments-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-gateway
+  namespace: storefront-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: checkout-gateway
+  template:
+    metadata:
+      labels:
+        app: checkout-gateway
+        role: checkout-client
+    spec:
+      containers:
+      - name: client
+        image: curlimages/curl:8.12.1
+        command: ["sleep", "360000"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: untrusted-client
+  namespace: untrusted
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: untrusted-client
+  template:
+    metadata:
+      labels:
+        app: untrusted-client
+    spec:
+      containers:
+      - name: client
+        image: curlimages/curl:8.12.1
+        command: ["sleep", "360000"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: checkout-egress
+  namespace: storefront-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: checkout-gateway
+      role: checkout-client
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          security-zone: payments-core
+      podSelector:
+        matchLabels:
+          app: payments-api
+          role: backend
+    ports:
+    - protocol: TCP
+      port: 8080
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: payments-ingress
+  namespace: payments-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: payments-api
+      role: backend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          security-zone: checkout-edge-v2
+      podSelector:
+        matchLabels:
+          app: checkout-gateway
+          role: checkout-client
+    ports:
+    - protocol: TCP
+      port: 8080
