@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ledger-prod
+  labels:
+    eval-admission: active
+    owner: finance-platform
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger-api
+  namespace: ledger-prod
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: ledger-api
+  template:
+    metadata:
+      labels:
+        app: ledger-api
+        role: ledger-backend
+    spec:
+      containers:
+      - name: ledger
+        image: python:3.12-alpine
+        command:
+        - python
+        - -u
+        - -c
+        - |
+          from http.server import HTTPServer, BaseHTTPRequestHandler
+          reserve = bytearray(24 * 1024 * 1024)
+          class Handler(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  self.send_response(200)
+                  self.end_headers()
+                  self.wfile.write(b"ledger-api healthy")
+              def log_message(self, *args):
+                  pass
+          HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+        ports:
+        - containerPort: 8080
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 1
+          periodSeconds: 2
+        resources:
+          requests:
+            memory: 8Mi
+            cpu: 20m
+          limits:
+            memory: 96Mi
+            cpu: 200m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ledger-api
+  namespace: ledger-prod
+spec:
+  selector:
+    app: ledger-api
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger-verifier
+  namespace: ledger-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ledger-verifier
+  template:
+    metadata:
+      labels:
+        app: ledger-verifier
+        role: ledger-verifier
+    spec:
+      containers:
+      - name: client
+        image: curlimages/curl:8.12.1
+        command: ["sleep", "360000"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ledger-ingress
+  namespace: ledger-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: ledger-api
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          role: ledger-verifier
+    ports:
+    - protocol: TCP
+      port: 8080

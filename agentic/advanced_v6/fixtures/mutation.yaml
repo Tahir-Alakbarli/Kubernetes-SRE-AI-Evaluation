@@ -1,0 +1,34 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: ledger-resource-injector
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        eval-admission: active
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE"]
+      resources: ["pods"]
+  matchConditions:
+  - name: ledger-only
+    expression: 'has(object.metadata.labels) && "app" in object.metadata.labels && object.metadata.labels["app"] == "ledger-api"'
+  mutations:
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: '[JSONPatch{op: "replace", path: "/spec/containers/0/resources/limits/memory", value: "16Mi"}]'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: ledger-resource-injector
+spec:
+  policyName: ledger-resource-injector
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        eval-admission: active
